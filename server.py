@@ -16,6 +16,7 @@ from telegram.ext import (
         )
 
 from categories import Categories
+import expenses
 
 logging.basicConfig(level=logging.WARN)
 
@@ -24,12 +25,10 @@ logger = logging.getLogger(__name__)
 API_TOKEN =  os.getenv("TELEGRAM_TOKEN")
 class State(Enum):
     CHOOSING_COMMAND = 0
-    REPLYING_NAME_ADD= 1
-    REPLYING_NAME_DELETE= 2
-
-class Category_mode(Enum):
-    DELETE = 0
-    ADD = 1
+    REPLYING_CATEGORY_NAME_ADD= 1
+    REPLYING_CATEGORY_NAME_DELETE= 2
+    REPLYING_EXPENSE_CATEGORY_NAME = 3
+    REPLYING_EXPENSE_AMMOUNT = 4
 
 def start(update: Update, context: CallbackContext) -> int:
     """ Start of conversation, whether on bot start up or /start"""
@@ -39,13 +38,15 @@ def start(update: Update, context: CallbackContext) -> int:
             "/add_category - add categories\n"
             "/categories - list categories\n"
             "/del_category - delete category\n"
+            "/add_expense - add expense\n"
+            "/expenses_today - show today's expenses\n"
             )
     return State.CHOOSING_COMMAND
 
 def ask_add_category_name(update: Update, context: CallbackContext) -> int:
     """ Ask name of category to create it """
     update.message.reply_text("Specify category name\n")
-    return State.REPLYING_NAME_ADD
+    return State.REPLYING_CATEGORY_NAME_ADD
 
 def create_category(update: Update, context: CallbackContext) -> int:
     """ Finishes the exchange and creates a category"""
@@ -56,7 +57,7 @@ def create_category(update: Update, context: CallbackContext) -> int:
         if text  == c.name:
             update.message.reply_text("Category with this name already exists\n"
                                       "Specify a different name\n")
-            return State.REPLYING_NAME_ADD
+            return State.REPLYING_CATEGORY_NAME_ADD
 
     Categories().add_category(text)
     update.message.reply_text("Success\n")
@@ -77,7 +78,7 @@ def show_categories(update: Update, context: CallbackContext) -> int:
 def ask_delete_category_name(update: Update, context: CallbackContext) -> int:
     """ Ask name of category to delete it """
     update.message.reply_text("Specify category name\n")
-    return State.REPLYING_NAME_DELETE
+    return State.REPLYING_CATEGORY_NAME_DELETE
 
 def delete_category(update: Update, context: CallbackContext) -> int:
     """ Finishes the exchange and deletes a category """
@@ -88,11 +89,42 @@ def delete_category(update: Update, context: CallbackContext) -> int:
         if text == c.name:
             Categories().del_category(c)
             update.message.reply_text("Category successfully deleted\n")
+            return State.CHOOSING_COMMAND
 
     update.message.reply_text("Category you are trying to delete does not exist\n"
                               "Specify a different name\n")
 
-    return State.REPLYING_NAME_DELETE
+    return State.REPLYING_CATEGORY_NAME_DELETE
+
+def show_today_expenses(update: Update, context: CallbackContext) -> int:
+    """ Show all expenses """
+    update.message.reply_text(expenses.get_today_expenses())
+
+    return State.CHOOSING_COMMAND
+
+def ask_expense_category_name(update: Update, context: CallbackContext) -> int:
+    """ Ask category name of the expense """
+    update.message.reply_text("In which category would you like to add an expense?\n")
+
+    return State.REPLYING_EXPENSE_CATEGORY_NAME
+
+def ask_expense_ammount(update: Update, context: CallbackContext) -> int:
+    """ Ask expense ammount """
+    context.user_data['category_name'] = update.message.text
+    update.message.reply_text("What's the ammount of the expense?\n")
+
+    return State.REPLYING_EXPENSE_AMMOUNT
+
+def create_expense(update: Update, context: CallbackContext) -> int:
+    """ Finishes the exchange and creates an expence """
+    category_name = context.user_data['category_name']
+    ammount = update.message.text
+
+    expenses.add_expense(category_name, ammount)
+
+    update.message.reply_text(f"Expense has been successfully added to category {category_name}\n")
+
+    return State.CHOOSING_COMMAND
 
 def main():
 
@@ -109,13 +141,21 @@ def main():
                     CommandHandler('add_category', ask_add_category_name),
                     CommandHandler('categories', show_categories),
                     CommandHandler('del_category', ask_delete_category_name),
+                    CommandHandler('expenses_today', show_today_expenses),
+                    CommandHandler('add_expense', ask_expense_category_name),
                     ],
-                State.REPLYING_NAME_ADD: [
+                State.REPLYING_CATEGORY_NAME_ADD: [
                     MessageHandler(Filters.text & ~(Filters.command | Filters.regex('^Done$')), create_category)
                     ],
-                State.REPLYING_NAME_DELETE:[
+                State.REPLYING_CATEGORY_NAME_DELETE:[
                     MessageHandler(Filters.text & ~(Filters.command | Filters.regex('^Done$')), delete_category)
                     ],
+                State.REPLYING_EXPENSE_CATEGORY_NAME: [
+                    MessageHandler(Filters.text & ~(Filters.command | Filters.regex('^Done$')), ask_expense_ammount)
+                    ],
+                State.REPLYING_EXPENSE_AMMOUNT:[
+                    MessageHandler(Filters.text & ~(Filters.command | Filters.regex('^Done$')), create_expense)
+                    ]
                 },
             fallbacks = [CommandHandler('cancel', start)],
             allow_reentry = True,

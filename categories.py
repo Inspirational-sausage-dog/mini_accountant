@@ -20,10 +20,9 @@ class Categories:
 
     def add_category(self, category_name: str) -> Category:
         """Создает категорию по названию """
-        new_Category = Category(name = category_name)
         db.insert("categories", {"name" : f"{category_name}"})
-        return new_Category
-    
+        return Category(name = category_name)
+
     def del_category(self, category: Category):
         """ Удаляет существующую категорию """
         db.delete("categories", category.name)
@@ -40,3 +39,13 @@ class Categories:
     def get_all_categories(self) -> List[Category]:
         """Возращает все существующие категории"""
         return self._categories
+
+    def get_category(self, category_name: str) -> Category:
+        """ Возращает категорию по имени """
+
+        for cat in self._load_categories:
+            if cat.name == category_name:
+                return cat
+
+        return None
+

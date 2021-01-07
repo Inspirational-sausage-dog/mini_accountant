@@ -30,9 +30,13 @@ def fetchall(table: str, columns: List[str]) -> List[Tuple]:
     return result
 
 def delete(table: str, name: str):
-    placeholder = '?' * len(name)
-    cursor.execute(f"DELETE FROM {table} WHERE name = ({placeholder})", name)
+    placeholder = "?"
+    query = f"DELETE FROM {table} WHERE name = {placeholder}"
+    cursor.execute(query, (name,))
     conn.commit()
+
+def get_cursor():
+    return cursor
 
 def _init_db():
     """Инициализирует дб"""
