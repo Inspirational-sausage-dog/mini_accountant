@@ -23,6 +23,7 @@ logging.basicConfig(level=logging.WARN)
 logger = logging.getLogger(__name__)
 
 API_TOKEN =  os.getenv("TELEGRAM_TOKEN")
+
 class State(Enum):
     CHOOSING_COMMAND = 0
     REPLYING_CATEGORY_NAME_ADD= 1
@@ -88,7 +89,8 @@ def delete_category(update: Update, context: CallbackContext) -> int:
     for c in categories:
         if text == c.name:
             Categories().del_category(c)
-            update.message.reply_text("Category successfully deleted\n")
+            expenses.delete_expenses(c)
+            update.message.reply_text("Category and associated expenses were successfully deleted\n")
             return State.CHOOSING_COMMAND
 
     update.message.reply_text("Category you are trying to delete does not exist\n"

@@ -29,10 +29,14 @@ def fetchall(table: str, columns: List[str]) -> List[Tuple]:
         result.append(dict_row)
     return result
 
-def delete(table: str, name: str):
+def delete(table: str, condition: Dict):
+    """ Delete rows with passed condition """
+    column = ', '.join(condition.keys())
+    value = ', '.join(str(v) for v in condition.values())
     placeholder = "?"
-    query = f"DELETE FROM {table} WHERE name = {placeholder}"
-    cursor.execute(query, (name,))
+    print(column, value)
+    query = f"DELETE FROM {table} WHERE {column} = {placeholder}"
+    cursor.execute(query, (value,))
     conn.commit()
 
 def get_cursor():

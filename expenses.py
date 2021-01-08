@@ -5,29 +5,26 @@ import db
 
 import pytz
 
-from categories import Category
+from categories import Category, Categories
 
 class Expense(NamedTuple):
-    """ Структура затраты """
+    """ Expense structure """
     id: Optional[int]
     ammount: float
-    category_name: str
+    category_id: Optional[int]
 
-def add_expense(category_name: str, ammount: float) -> Expense:
-
-    cursor = db.get_cursor()
-    cursor.execute("SELECT id, name FROM categories WHERE name= ?", (category_name,))
-    category_data = cursor.fetchone()
-
+def add_expense(category_name: str, ammount: float):
+    """ Add expense associated with category """
+    category = Categories().get_category(category_name)
     db.insert("expenses", {
-        "category_id" : category_data[0],
+        "category_id" : category.id,
         "ammount" : ammount,
         "created" : _get_now_formatted()
         })
 
-    return Expense(id = None,
-                   ammount = ammount,
-                   category_name = category_data[1])
+def delete_expenses(category: Category):
+    """ Delete expenses by category id """
+    db.delete("expenses", {"category_id" : category.id})
 
 def get_today_expenses() -> str:
 
@@ -37,6 +34,7 @@ def get_today_expenses() -> str:
             "LEFT JOIN categories c "
             "ON e.category_id = c.id "
             "WHERE date(created) = date('now', 'localtime')"
+            "ORDER BY c.name ASC"
             )
     rows = cursor.fetchall()
 
