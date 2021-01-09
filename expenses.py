@@ -1,11 +1,20 @@
 """ Работа с затратами """
+import os
+
 from typing import Dict, List, NamedTuple, Optional
 import datetime
 import db
+import exceptions
 
+import re
 import pytz
 
 from categories import Category, Categories
+
+class Message(NamedTuple):
+    """ Message structure """
+    category_name: str
+    ammount: float
 
 class Expense(NamedTuple):
     """ Expense structure """
@@ -13,12 +22,18 @@ class Expense(NamedTuple):
     ammount: float
     category_id: Optional[int]
 
-def add_expense(category_name: str, ammount: float):
+def add_expense(raw_message: str):
     """ Add expense associated with category """
-    category = Categories().get_category(category_name)
+    message = _parse_message(raw_message)
+    category = Categories().get_category(message.category_name)
+    if not category:
+        raise exceptions.CategoryDoesNotExistException(
+                "Category does exist.\n"
+                "Try again\n"
+                )
     db.insert("expenses", {
         "category_id" : category.id,
-        "ammount" : ammount,
+        "ammount" : message.ammount,
         "created" : _get_now_formatted()
         })
 
@@ -54,15 +69,27 @@ def get_today_expenses() -> str:
             name = r['name']
             message+=f"\n{name}:\n"
         message+=f"{created} - {ammount} Рублей\n"
- 
     return message
 
+def _parse_message(raw_message: str) -> Message:
+    """ Parse text and return a message object containing category name and ammount """
+    regexp_result = re.match(r"(.*) ([\d]+)", raw_message)
+    if not regexp_result or not regexp_result.group(0) \
+            or not regexp_result.group(1) or not regexp_result.group(2):
+        raise exceptions.NotCorrectMessageException(
+                "Cannot understand message. Try writing message in format:\n"
+                "Transport 2000\n")
+
+    category_name = regexp_result.group(1).strip().lower()
+    ammount = regexp_result.group(2)
+    return Message(category_name = category_name, ammount = ammount)
+
 def _get_now_formatted()  -> str:
-    """ Возращает сегодняшнюю дату строкой """
+    """ Return today's date and time as a string """
     return _get_now_datetime().strftime("%Y-%m-%d %H:%M:%S")
 
 def _get_now_datetime() -> datetime.datetime:
-    """ Возращает сегодняшний datetime с учетом временной зоны МСК. """
-    tz = pytz.timezone("Europe/Moscow")
+    """ return current datetime in enviroment's timezone """
+    tz = pytz.timezone(os.getenv("TZ"))
     now = datetime.datetime.now(tz)
     return now

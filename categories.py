@@ -13,7 +13,7 @@ class Categories:
         self._categories = self._load_categories()
 
     def _load_categories(self) -> List[Category]:
-        """возращает все существующие категории в дб"""
+        """Returns all existing categories stored in db"""
         categories = db.fetchall(
                 "categories", ["id","name"]
         )

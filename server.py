@@ -1,6 +1,7 @@
 import os
 
 import logging
+import traceback
 
 from typing import Dict, List
 from enum import Enum
@@ -17,8 +18,13 @@ from telegram.ext import (
 
 from categories import Categories
 import expenses
+import exceptions
 
-logging.basicConfig(level=logging.WARN)
+logging.basicConfig(filename = './log/mini_accountant.log',
+        filemode = 'w',
+        level=logging.DEBUG,
+        format = '%(asctime)s - %(levelname)s - %(message)s'
+        )
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +34,7 @@ class State(Enum):
     CHOOSING_COMMAND = 0
     REPLYING_CATEGORY_NAME_ADD= 1
     REPLYING_CATEGORY_NAME_DELETE= 2
-    REPLYING_EXPENSE_CATEGORY_NAME = 3
-    REPLYING_EXPENSE_AMMOUNT = 4
+    REPLYING_EXPENSE_INFO = 3
 
 def start(update: Update, context: CallbackContext) -> int:
     """ Start of conversation, whether on bot start up or /start"""
@@ -52,7 +57,7 @@ def ask_add_category_name(update: Update, context: CallbackContext) -> int:
 def create_category(update: Update, context: CallbackContext) -> int:
     """ Finishes the exchange and creates a category"""
     categories = Categories().get_all_categories()
-    text = update.message.text
+    text = update.message.text.lower()
 
     for c in categories:
         if text  == c.name:
@@ -61,7 +66,8 @@ def create_category(update: Update, context: CallbackContext) -> int:
             return State.REPLYING_CATEGORY_NAME_ADD
 
     Categories().add_category(text)
-    update.message.reply_text("Success\n")
+    update.message.reply_text("Success!\n"
+            f"Category {text} has been added to the database.")
 
     return State.CHOOSING_COMMAND
 
@@ -84,7 +90,7 @@ def ask_delete_category_name(update: Update, context: CallbackContext) -> int:
 def delete_category(update: Update, context: CallbackContext) -> int:
     """ Finishes the exchange and deletes a category """
     categories = Categories().get_all_categories()
-    text = update.message.text
+    text = update.message.text.lower()
 
     for c in categories:
         if text == c.name:
@@ -104,27 +110,27 @@ def show_today_expenses(update: Update, context: CallbackContext) -> int:
 
     return State.CHOOSING_COMMAND
 
-def ask_expense_category_name(update: Update, context: CallbackContext) -> int:
+def ask_expense_info(update: Update, context: CallbackContext) -> int:
     """ Ask category name of the expense """
-    update.message.reply_text("In which category would you like to add an expense?\n")
+    update.message.reply_text("In which category would you like to add an expense?\n"
+            "Answer in a format:\n"
+            "Transport 1000\n")
 
-    return State.REPLYING_EXPENSE_CATEGORY_NAME
-
-def ask_expense_ammount(update: Update, context: CallbackContext) -> int:
-    """ Ask expense ammount """
-    context.user_data['category_name'] = update.message.text
-    update.message.reply_text("What's the ammount of the expense?\n")
-
-    return State.REPLYING_EXPENSE_AMMOUNT
+    return State.REPLYING_EXPENSE_INFO
 
 def create_expense(update: Update, context: CallbackContext) -> int:
     """ Finishes the exchange and creates an expence """
-    category_name = context.user_data['category_name']
-    ammount = update.message.text
+    raw_message  = update.message.text
+    try:
+        expenses.add_expense(raw_message)
+    except exceptions.NotCorrectMessageException as e:
+        update.message.reply_text(str(e))
+        return State.REPLYING_EXPENSE_INFO
+    except exceptions.CategoryDoesNotExistException as e:
+        update.message.reply_text(str(e))
+        return State.REPLYING_EXPENSE_INFO
 
-    expenses.add_expense(category_name, ammount)
-
-    update.message.reply_text(f"Expense has been successfully added to category {category_name}\n")
+    update.message.reply_text(f"Expense {raw_message} has been successfully added\n")
 
     return State.CHOOSING_COMMAND
 
@@ -144,19 +150,16 @@ def main():
                     CommandHandler('categories', show_categories),
                     CommandHandler('del_category', ask_delete_category_name),
                     CommandHandler('expenses_today', show_today_expenses),
-                    CommandHandler('add_expense', ask_expense_category_name),
+                    CommandHandler('add_expense', ask_expense_info),
                     ],
                 State.REPLYING_CATEGORY_NAME_ADD: [
-                    MessageHandler(Filters.text & ~(Filters.command | Filters.regex('^Done$')), create_category)
+                    MessageHandler(Filters.text & ~Filters.command, create_category)
                     ],
                 State.REPLYING_CATEGORY_NAME_DELETE:[
-                    MessageHandler(Filters.text & ~(Filters.command | Filters.regex('^Done$')), delete_category)
+                    MessageHandler(Filters.text & ~Filters.command, delete_category)
                     ],
-                State.REPLYING_EXPENSE_CATEGORY_NAME: [
-                    MessageHandler(Filters.text & ~(Filters.command | Filters.regex('^Done$')), ask_expense_ammount)
-                    ],
-                State.REPLYING_EXPENSE_AMMOUNT:[
-                    MessageHandler(Filters.text & ~(Filters.command | Filters.regex('^Done$')), create_expense)
+                State.REPLYING_EXPENSE_INFO: [
+                    MessageHandler(Filters.text & ~Filters.command, create_expense)
                     ]
                 },
             fallbacks = [CommandHandler('cancel', start)],
@@ -171,4 +174,8 @@ def main():
     updater.idle()
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as e:
+        logging.exception(str(e))
+        update.message.reply_text("Unexpected error has occured\n")

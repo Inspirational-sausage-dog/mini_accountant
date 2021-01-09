@@ -34,7 +34,6 @@ def delete(table: str, condition: Dict):
     column = ', '.join(condition.keys())
     value = ', '.join(str(v) for v in condition.values())
     placeholder = "?"
-    print(column, value)
     query = f"DELETE FROM {table} WHERE {column} = {placeholder}"
     cursor.execute(query, (value,))
     conn.commit()
