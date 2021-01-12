@@ -20,17 +20,14 @@ class Expense(NamedTuple):
     """ Expense structure """
     id: Optional[int]
     ammount: float
-    category_id: Optional[int]
+    category_name: str
 
 def add_expense(raw_message: str):
     """ Add expense associated with category """
     message = _parse_message(raw_message)
     category = Categories().get_category(message.category_name)
     if not category:
-        raise exceptions.CategoryDoesNotExistException(
-                "Category does exist.\n"
-                "Try again\n"
-                )
+        category = Categories().add_category(message.category_name)
     db.insert("expenses", {
         "category_id" : category.id,
         "ammount" : message.ammount,
@@ -44,7 +41,8 @@ def delete_expenses(category: Category):
 def get_today_expenses() -> str:
 
     cursor = db.get_cursor()
-    cursor.execute("SELECT c.name, e.created, e.ammount "
+    cursor.execute(
+            "SELECT c.name, e.created, e.ammount "
             "FROM expenses e "
             "LEFT JOIN categories c "
             "ON e.category_id = c.id "
@@ -53,32 +51,53 @@ def get_today_expenses() -> str:
             )
     rows = cursor.fetchall()
 
-    result = []
-    for row in rows:
-        dict_row = {}
-        for index, column in enumerate(['name', 'created', 'ammount']):
-            dict_row[column] = row[index]
-        result.append(dict_row)
+    if not rows:
+        return "There are no expenses yet\n"
 
-    message = ""
+    message = "Today's expenses:\n"
     name = ""
-    for r in result:
-        created = r['created']
-        ammount = r['ammount']
-        if name != r['name']:
-            name = r['name']
-            message+=f"\n{name}:\n"
-        message+=f"{created} - {ammount} Рублей\n"
+    for row in rows:
+        if name != row[0]:
+            name = row[0]
+            message+= "\n" + (f"{name}:\n").capitalize()
+        created = datetime.datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S").time()
+        ammount = row[2]
+        message+=f"{created} | {ammount} \n"
+    return message
+
+def get_last_expenses() -> str:
+
+    cursor = db.get_cursor()
+    cursor.execute("SELECT c.name, e.created, e.ammount "
+            "FROM expenses e "
+            "LEFT JOIN categories c "
+            "ON e.category_id = c.id "
+            "ORDER BY created DESC "
+            "LIMIT 10"
+            )
+    rows = cursor.fetchall()
+
+    if not rows:
+        return "There are no expenses yet\n"
+
+    message = "Last 10 expenses:\n\n"
+    for row in rows:
+        name = row[0]
+        created = row[1]
+        ammount = row[2]
+        message+=f"{created} | {name} | {ammount}\n"
     return message
 
 def _parse_message(raw_message: str) -> Message:
     """ Parse text and return a message object containing category name and ammount """
-    regexp_result = re.match(r"(.*) ([\d]+)", raw_message)
+    regexp_result = re.match(r"(.*) (-?[\d]+)", raw_message)
     if not regexp_result or not regexp_result.group(0) \
             or not regexp_result.group(1) or not regexp_result.group(2):
         raise exceptions.NotCorrectMessageException(
-                "Cannot understand message. Try writing message in format:\n"
-                "Transport 2000\n")
+                "Could not understand message. Please answer in format:\n"
+                "Category Ammount\n"
+                "For example: Transport -1000\n"
+                )
 
     category_name = regexp_result.group(1).strip().lower()
     ammount = regexp_result.group(2)

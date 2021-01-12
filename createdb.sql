@@ -6,7 +6,7 @@ create table categories(
 create table expenses(
     id integer primary key,
     category_id integer,
-    ammount integer,
+    ammount float,
     created datetime,
     FOREIGN KEY(category_id) REFERENCES category(id)
 );

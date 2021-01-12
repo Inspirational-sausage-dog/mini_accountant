@@ -19,9 +19,10 @@ class Categories:
         )
         return self._fill_fields(categories)
 
-    def add_category(self, category_name: str):
+    def add_category(self, category_name: str) -> Category:
         """Создает категорию по названию """
         db.insert("categories", {"name" : f"{category_name}"})
+        return self.get_category(category_name)
 
     def del_category(self, category: Category):
         """ Удаляет существующую категорию """
