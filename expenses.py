@@ -1,7 +1,7 @@
 """ Работа с затратами """
 import os
 
-from typing import Dict, List, NamedTuple, Optional
+from typing import Dict, List, NamedTuple, Optional, Tuple
 import datetime
 import db
 import exceptions
@@ -24,7 +24,7 @@ class Expense(NamedTuple):
 
 def add_expense(raw_message: str):
     """ Add expense associated with category """
-    message = _parse_message(raw_message)
+    message = _parse_input(raw_message)
     category = Categories().get_category(message.category_name)
     if not category:
         category = Categories().add_category(message.category_name)
@@ -38,35 +38,8 @@ def delete_expenses(category: Category):
     """ Delete expenses by category id """
     db.delete("expenses", {"category_id" : category.id})
 
-def get_today_expenses() -> str:
-
-    cursor = db.get_cursor()
-    cursor.execute(
-            "SELECT c.name, e.created, e.ammount "
-            "FROM expenses e "
-            "LEFT JOIN categories c "
-            "ON e.category_id = c.id "
-            "WHERE date(created) = date('now', 'localtime')"
-            "ORDER BY c.name ASC"
-            )
-    rows = cursor.fetchall()
-
-    if not rows:
-        return "There are no expenses yet\n"
-
-    message = "Today's expenses:\n"
-    name = ""
-    for row in rows:
-        if name != row[0]:
-            name = row[0]
-            message+= "\n" + (f"{name}:\n").capitalize()
-        created = datetime.datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S").time()
-        ammount = row[2]
-        message+=f"{created} | {ammount} \n"
-    return message
-
 def get_last_expenses() -> str:
-
+    """ Return answer containing last 10 expenses """
     cursor = db.get_cursor()
     cursor.execute("SELECT c.name, e.created, e.ammount "
             "FROM expenses e "
@@ -88,7 +61,61 @@ def get_last_expenses() -> str:
         message+=f"{created} | {name} | {ammount}\n"
     return message
 
-def _parse_message(raw_message: str) -> Message:
+def get_today_expenses() -> str:
+    """ Return answer containing today's expenses """
+    cursor = db.get_cursor()
+    cursor.execute(
+            "SELECT c.name, e.created, e.ammount "
+            "FROM expenses e "
+            "LEFT JOIN categories c "
+            "ON e.category_id = c.id "
+            "WHERE date(created) = date('now', 'localtime') "
+            "ORDER BY c.name ASC"
+            )
+    rows = cursor.fetchall()
+
+    if not rows:
+        return "There are no expenses yet\n"
+    return _parse_output(rows)
+
+def get_month_expenses() -> str:
+    """ Return answer containing this month's expenses """
+    cursor = db.get_cursor()
+    cursor.execute(
+            "SELECT c.name, e.created, e.ammount "
+            "FROM expenses e "
+            "LEFT JOIN categories c "
+            "ON e.category_id = c.id "
+            "WHERE strftime('%Y-%m', created) = strftime('%Y-%m', 'now') "
+            "ORDER BY c.name ASC"
+            )
+    rows = cursor.fetchall()
+    if not rows:
+        return "There are no expenses yet\n"
+    return _parse_output(rows)
+
+def _parse_output(rows: List[Tuple]) -> str:
+
+    message = ""
+    name = ""
+    total = 0
+    category_total = 0
+    for row in rows:
+        if name != row[0]:
+            if name != "":
+                message+="Category total:" + str(category_total)
+                category_total = 0
+            name = row[0]
+            message+= "\n\n" + (f"{name}:\n").capitalize()
+        created = datetime.datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S")
+        ammount = row[2]
+        total += int(ammount)
+        category_total+= int(ammount)
+        message+=f"{created} | {ammount} \n"
+
+    return "Today's expenses:\n" + message + "Category total: " + str(category_total) + "\n\nTotal balance today: " + str(total)
+
+def _parse_input(raw_message: str) -> Message:
     """ Parse text and return a message object containing category name and ammount """
     regexp_result = re.match(r"(.*) (-?[\d]+)", raw_message)
     if not regexp_result or not regexp_result.group(0) \

@@ -91,6 +91,12 @@ def show_last_expenses(update: Update, context: CallbackContext) -> int:
 
     return State.CHOOSING_COMMAND
 
+def show_month_expenses(update: Update, context: CallbackContext) -> int:
+    """ Show last 10 expenses """
+    update.message.reply_text(expenses.get_month_expenses())
+
+    return State.CHOOSING_COMMAND
+
 def ask_expense_info(update: Update, context: CallbackContext) -> int:
     """ Ask category name of the expense """
     update.message.reply_text(
@@ -132,7 +138,7 @@ def main():
                     CommandHandler('del_category', ask_delete_category_name),
                     CommandHandler('add_expense', ask_expense_info),
                     CommandHandler('expenses_today', show_today_expenses),
-                    CommandHandler('last_expenses', show_last_expenses),
+                    CommandHandler('expenses_month', show_month_expenses),
                     MessageHandler(~Filters.command, start)
                     ],
                 State.REPLYING_CATEGORY_NAME_DELETE:[
