@@ -95,7 +95,7 @@ def get_month_expenses() -> str:
     return _parse_output(rows)
 
 def _parse_output(rows: List[Tuple]) -> str:
-
+    """ Parse text and return string for output """
     message = ""
     name = ""
     total = 0
@@ -113,7 +113,7 @@ def _parse_output(rows: List[Tuple]) -> str:
         category_total+= int(ammount)
         message+=f"{created} | {ammount} \n"
 
-    return "Today's expenses:\n" + message + "Category total: " + str(category_total) + "\n\nTotal balance today: " + str(total)
+    return "Today's expenses:" + message + "Category total: " + str(category_total) + "\n\nTotal balance today: " + str(total)
 
 def _parse_input(raw_message: str) -> Message:
     """ Parse text and return a message object containing category name and ammount """
