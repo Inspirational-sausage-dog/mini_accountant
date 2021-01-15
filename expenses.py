@@ -2,6 +2,7 @@
 import os
 
 from typing import Dict, List, NamedTuple, Optional, Tuple
+from enum import Enum
 import datetime
 import db
 import exceptions
@@ -10,6 +11,11 @@ import re
 import pytz
 
 from categories import Category, Categories
+
+class Date(Enum):
+    LAST = 0
+    TODAY = 1
+    MONTH = 2
 
 class Message(NamedTuple):
     """ Message structure """
@@ -38,10 +44,25 @@ def delete_expenses(category: Category):
     """ Delete expenses by category id """
     db.delete("expenses", {"category_id" : category.id})
 
+def delete_last() -> str:
+    """ [DOESN'T WORK]Delete last added expense, returns status of whether it deleted or not """
+    cursor = db.get_cursor()
+    result = db.fetchall("expenses", ['created'])
+    if not result:
+        return "There are no expenses yet."
+    cursor.execute(
+            "DELETE FROM expenses "
+            "WHERE created IN "
+            "(SELECT created FROM expenses "
+            "ORDER BY created DESC LIMIT 1)"
+            )
+    return "Last expense was successfully deleted\n"
+
 def get_last_expenses() -> str:
     """ Return answer containing last 10 expenses """
     cursor = db.get_cursor()
-    cursor.execute("SELECT c.name, e.created, e.ammount "
+    cursor.execute(
+            "SELECT c.name, e.created, e.ammount "
             "FROM expenses e "
             "LEFT JOIN categories c "
             "ON e.category_id = c.id "
@@ -61,41 +82,30 @@ def get_last_expenses() -> str:
         message+=f"{created} | {name} | {ammount}\n"
     return message
 
-def get_today_expenses() -> str:
-    """ Return answer containing today's expenses """
+def get_expenses(date: Date) -> str:
+
+    switcher = {
+            Date.LAST: get_last_expenses(),
+            Date.TODAY: "Today's expenses: " + _parse_output('%Y-%m-%d'),
+            Date.MONTH: "This month's expenses: " + _parse_output('%Y-%m')
+            }
+    return switcher.get(date)
+
+def _parse_output(date: str)-> str:
+    """ Return a parsed answer containing expenses in selected date """
     cursor = db.get_cursor()
     cursor.execute(
             "SELECT c.name, e.created, e.ammount "
             "FROM expenses e "
             "LEFT JOIN categories c "
             "ON e.category_id = c.id "
-            "WHERE date(created) = date('now', 'localtime') "
-            "ORDER BY c.name ASC"
-            )
-    rows = cursor.fetchall()
-
-    if not rows:
-        return "There are no expenses yet\n"
-    return _parse_output(rows)
-
-def get_month_expenses() -> str:
-    """ Return answer containing this month's expenses """
-    cursor = db.get_cursor()
-    cursor.execute(
-            "SELECT c.name, e.created, e.ammount "
-            "FROM expenses e "
-            "LEFT JOIN categories c "
-            "ON e.category_id = c.id "
-            "WHERE strftime('%Y-%m', created) = strftime('%Y-%m', 'now') "
+            f"WHERE strftime('{date}', created) = strftime('{date}', 'now') "
             "ORDER BY c.name ASC"
             )
     rows = cursor.fetchall()
     if not rows:
         return "There are no expenses yet\n"
-    return _parse_output(rows)
 
-def _parse_output(rows: List[Tuple]) -> str:
-    """ Parse text and return string for output """
     message = ""
     name = ""
     total = 0
@@ -103,7 +113,7 @@ def _parse_output(rows: List[Tuple]) -> str:
     for row in rows:
         if name != row[0]:
             if name != "":
-                message+="Category total:" + str(category_total)
+                message+="Category total: " + str(category_total)
                 category_total = 0
             name = row[0]
             message+= "\n\n" + (f"{name}:\n").capitalize()
@@ -113,7 +123,7 @@ def _parse_output(rows: List[Tuple]) -> str:
         category_total+= int(ammount)
         message+=f"{created} | {ammount} \n"
 
-    return "Today's expenses:" + message + "Category total: " + str(category_total) + "\n\nTotal balance today: " + str(total)
+    return message + "Category total: " + str(category_total) + "\n\nCurrent balance: " + str(total)
 
 def _parse_input(raw_message: str) -> Message:
     """ Parse text and return a message object containing category name and ammount """

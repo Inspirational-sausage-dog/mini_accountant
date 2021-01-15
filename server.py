@@ -39,17 +39,6 @@ def start(update: Update, context: CallbackContext) -> int:
             )
     return State.CHOOSING_COMMAND
 
-def show_categories(update: Update, context: CallbackContext) -> int:
-    """ Show all categories available in database"""
-    categories = Categories().get_all_categories()
-
-    answer_message = "Categories:\n\n" +\
-            ("\n".join([c.name for c in categories]))
-
-    update.message.reply_text(answer_message)
-
-    return State.CHOOSING_COMMAND
-
 def ask_delete_category_name(update: Update, context: CallbackContext) -> int:
     """ Ask name of category to delete it """
     update.message.reply_text(
@@ -79,22 +68,29 @@ def delete_category(update: Update, context: CallbackContext) -> int:
 
     return State.REPLYING_CATEGORY_NAME_DELETE
 
-def show_today_expenses(update: Update, context: CallbackContext) -> int:
-    """ Show all expenses """
-    update.message.reply_text(expenses.get_today_expenses())
+def delete_last(update: Update, context: CallbackContext) -> int:
+    """ Delete last added expense """
+    expenses.delete_last()
+
+    update.message.reply_text(expenses.delete_last())
 
     return State.CHOOSING_COMMAND
 
 def show_last_expenses(update: Update, context: CallbackContext) -> int:
     """ Show last 10 expenses """
-    update.message.reply_text(expenses.get_last_expenses())
+    update.message.reply_text(expenses.get_expenses(expenses.Date.LAST))
+
+    return State.CHOOSING_COMMAND
+
+def show_today_expenses(update: Update, context: CallbackContext) -> int:
+    """ Show today's expenses """
+    update.message.reply_text(expenses.get_expenses(expenses.Date.TODAY))
 
     return State.CHOOSING_COMMAND
 
 def show_month_expenses(update: Update, context: CallbackContext) -> int:
-    """ Show last 10 expenses """
-    update.message.reply_text(expenses.get_month_expenses())
-
+    """ Show this month's expenses """
+    update.message.reply_text(expenses.get_expenses(expenses.Date.MONTH))
     return State.CHOOSING_COMMAND
 
 def ask_expense_info(update: Update, context: CallbackContext) -> int:
@@ -117,7 +113,7 @@ def create_expense(update: Update, context: CallbackContext) -> int:
 
     update.message.reply_text(
             f"Expense {raw_message} has been successfully added\n"
-            "See latest expenses: /last_expenses\n"
+            "See latest expenses: /last\n"
             )
 
     return State.CHOOSING_COMMAND
@@ -134,11 +130,12 @@ def main():
             entry_points=[CommandHandler('start', start)],
             states={
                 State.CHOOSING_COMMAND: [
-                    CommandHandler('categories', show_categories),
                     CommandHandler('del_category', ask_delete_category_name),
+                    CommandHandler('del_last', delete_last),
                     CommandHandler('add_expense', ask_expense_info),
-                    CommandHandler('expenses_today', show_today_expenses),
-                    CommandHandler('expenses_month', show_month_expenses),
+                    CommandHandler('last', show_last_expenses),
+                    CommandHandler('today', show_today_expenses),
+                    CommandHandler('month', show_month_expenses),
                     MessageHandler(~Filters.command, start)
                     ],
                 State.REPLYING_CATEGORY_NAME_DELETE:[
