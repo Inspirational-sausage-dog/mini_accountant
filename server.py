@@ -27,9 +27,8 @@ logger = logging.getLogger(__name__)
 API_TOKEN =  os.getenv("TELEGRAM_TOKEN")
 
 class State(Enum):
-    CHOOSING_COMMAND = 0
-    REPLYING_CATEGORY_NAME_DELETE= 1
-    REPLYING_EXPENSE_INFO = 2
+    REPLYING_CATEGORY_NAME_DELETE= 0
+    REPLYING_EXPENSE_INFO = 1
 
 def start(update: Update, context: CallbackContext) -> int:
     """ Start of conversation, whether on bot start up or /start"""
@@ -37,7 +36,7 @@ def start(update: Update, context: CallbackContext) -> int:
             "Hello, I'm mini-accountant!\n\n"
             "To add an expense use the /add_expense command.\n"
             )
-    return State.CHOOSING_COMMAND
+    return ConversationHandler.END
 
 def ask_delete_category_name(update: Update, context: CallbackContext) -> int:
     """ Ask name of category to delete it """
@@ -55,11 +54,11 @@ def delete_category(update: Update, context: CallbackContext) -> int:
     for c in categories:
         if text == c.name:
             Categories().del_category(c)
-            expenses.delete_expenses(c)
+            expenses.delete_category(c)
             update.message.reply_text(
                     "Category and associated expenses were successfully deleted\n"
                     )
-            return State.CHOOSING_COMMAND
+            return ConversationHandler.END
 
     update.message.reply_text(
             "Category you are trying to delete does not exist\n"
@@ -70,34 +69,34 @@ def delete_category(update: Update, context: CallbackContext) -> int:
 
 def delete_last(update: Update, context: CallbackContext) -> int:
     """ Delete last added expense """
-    expenses.delete_last()
 
     update.message.reply_text(expenses.delete_last())
 
-    return State.CHOOSING_COMMAND
+    return ConversationHandler.END
 
 def show_last_expenses(update: Update, context: CallbackContext) -> int:
     """ Show last 10 expenses """
     update.message.reply_text(expenses.get_expenses(expenses.Date.LAST))
 
-    return State.CHOOSING_COMMAND
+    return ConversationHandler.END
 
 def show_today_expenses(update: Update, context: CallbackContext) -> int:
     """ Show today's expenses """
     update.message.reply_text(expenses.get_expenses(expenses.Date.TODAY))
 
-    return State.CHOOSING_COMMAND
+    return ConversationHandler.END
 
 def show_month_expenses(update: Update, context: CallbackContext) -> int:
     """ Show this month's expenses """
     update.message.reply_text(expenses.get_expenses(expenses.Date.MONTH))
-    return State.CHOOSING_COMMAND
+    return ConversationHandler.END
 
 def ask_expense_info(update: Update, context: CallbackContext) -> int:
     """ Ask category name of the expense """
     update.message.reply_text(
             "To add an expense reply category and ammount of your expense.\n"
             "For Example: Transport -1000\n"
+            "Tip: you can add multiple expenses dividing them with endline\n"
             )
 
     return State.REPLYING_EXPENSE_INFO
@@ -112,11 +111,13 @@ def create_expense(update: Update, context: CallbackContext) -> int:
         return State.REPLYING_EXPENSE_INFO
 
     update.message.reply_text(
-            f"Expense {raw_message} has been successfully added\n"
+            "Expenses: \n"
+            f"{raw_message} \n"
+            "have been successfully added\n"
             "See latest expenses: /last\n"
             )
 
-    return State.CHOOSING_COMMAND
+    return ConversationHandler.END
 
 def main():
 
@@ -127,9 +128,8 @@ def main():
 
     """Conversation Handler with states"""
     conv_handler = ConversationHandler(
-            entry_points=[CommandHandler('start', start)],
-            states={
-                State.CHOOSING_COMMAND: [
+            entry_points=[
+                    CommandHandler('start', start),
                     CommandHandler('del_category', ask_delete_category_name),
                     CommandHandler('del_last', delete_last),
                     CommandHandler('add_expense', ask_expense_info),
@@ -138,6 +138,7 @@ def main():
                     CommandHandler('month', show_month_expenses),
                     MessageHandler(~Filters.command, start)
                     ],
+            states={
                 State.REPLYING_CATEGORY_NAME_DELETE:[
                     MessageHandler(Filters.text & ~Filters.command, delete_category)
                     ],
@@ -146,7 +147,6 @@ def main():
                     ]
                 },
             fallbacks = [CommandHandler('cancel', start)],
-            allow_reentry = True,
             )
     dp.add_handler(conv_handler)
 

@@ -1,4 +1,4 @@
-""" Работа с затратами """
+""" Functions to create, delete expenses and return related statistics """
 import os
 
 from typing import Dict, List, NamedTuple, Optional, Tuple
@@ -30,32 +30,35 @@ class Expense(NamedTuple):
 
 def add_expense(raw_message: str):
     """ Add expense associated with category """
-    message = _parse_input(raw_message)
-    category = Categories().get_category(message.category_name)
-    if not category:
-        category = Categories().add_category(message.category_name)
-    db.insert("expenses", {
-        "category_id" : category.id,
-        "ammount" : message.ammount,
-        "created" : _get_now_formatted()
-        })
+    messages = _parse_input(raw_message)
+    categories = []
+    ammounts = []
+    for message in messages:
+        category = Categories().get_category(message.category_name)
+        if not category:
+            category = Categories().add_category(message.category_name)
+        db.insert("expenses", {
+            "category_id" : category.id,
+            "ammount" : message.ammount,
+            "created" : _get_now_formatted()
+            })
 
-def delete_expenses(category: Category):
+def delete_category(category: Category):
     """ Delete expenses by category id """
     db.delete("expenses", {"category_id" : category.id})
 
 def delete_last() -> str:
-    """ [DOESN'T WORK]Delete last added expense, returns status of whether it deleted or not """
+    """ Delete last added expense, returns status of whether it deleted or not """
     cursor = db.get_cursor()
-    result = db.fetchall("expenses", ['created'])
+    cursor.execute(
+            "SELECT id FROM expenses "
+            "ORDER BY created DESC LIMIT 1"
+            )
+    result = cursor.fetchone()
     if not result:
         return "There are no expenses yet."
-    cursor.execute(
-            "DELETE FROM expenses "
-            "WHERE created IN "
-            "(SELECT created FROM expenses "
-            "ORDER BY created DESC LIMIT 1)"
-            )
+    db.delete("expenses", {"id" : result[0]})
+    print(result[0])
     return "Last expense was successfully deleted\n"
 
 def get_last_expenses() -> str:
@@ -66,7 +69,7 @@ def get_last_expenses() -> str:
             "FROM expenses e "
             "LEFT JOIN categories c "
             "ON e.category_id = c.id "
-            "ORDER BY created DESC "
+            "ORDER BY created ASC "
             "LIMIT 10"
             )
     rows = cursor.fetchall()
@@ -84,12 +87,16 @@ def get_last_expenses() -> str:
 
 def get_expenses(date: Date) -> str:
 
+    cursor = db.get_cursor()
+    cursor.execute("SELECT SUM(ammount) FROM expenses")
+    balance = cursor.fetchone()
+
     switcher = {
             Date.LAST: get_last_expenses(),
             Date.TODAY: "Today's expenses: " + _parse_output('%Y-%m-%d'),
             Date.MONTH: "This month's expenses: " + _parse_output('%Y-%m')
             }
-    return switcher.get(date)
+    return switcher.get(date) + "\nBalance: " + str(balance[0])
 
 def _parse_output(date: str)-> str:
     """ Return a parsed answer containing expenses in selected date """
@@ -108,8 +115,8 @@ def _parse_output(date: str)-> str:
 
     message = ""
     name = ""
-    total = 0
-    category_total = 0
+    total = 0.0
+    category_total = 0.0
     for row in rows:
         if name != row[0]:
             if name != "":
@@ -119,26 +126,30 @@ def _parse_output(date: str)-> str:
             message+= "\n\n" + (f"{name}:\n").capitalize()
         created = datetime.datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S")
         ammount = row[2]
-        total += int(ammount)
-        category_total+= int(ammount)
+        total += float(ammount)
+        category_total+= float(ammount)
         message+=f"{created} | {ammount} \n"
 
-    return message + "Category total: " + str(category_total) + "\n\nCurrent balance: " + str(total)
+    return message + \
+        "Category total: " + str(category_total) + \
+        "\n\nPeriod total: " + str(total)
 
-def _parse_input(raw_message: str) -> Message:
+def _parse_input(raw_message: str) -> List[Message]:
     """ Parse text and return a message object containing category name and ammount """
-    regexp_result = re.match(r"(.*) (-?[\d]+)", raw_message)
-    if not regexp_result or not regexp_result.group(0) \
-            or not regexp_result.group(1) or not regexp_result.group(2):
-        raise exceptions.NotCorrectMessageException(
-                "Could not understand message. Please answer in format:\n"
-                "Category Ammount\n"
-                "For example: Transport -1000\n"
-                )
-
-    category_name = regexp_result.group(1).strip().lower()
-    ammount = regexp_result.group(2)
-    return Message(category_name = category_name, ammount = ammount)
+    messages = []
+    for raw in raw_message.split('\n'):
+        regexp_result = re.match(r"(.*) (-?[\d]+)", raw)
+        if not regexp_result or not regexp_result.group(0) \
+                or not regexp_result.group(1) or not regexp_result.group(2):
+            raise exceptions.NotCorrectMessageException(
+                    f"Could not understand {raw}. Please answer in format:\n"
+                    "Category Ammount\n"
+                    "For example: Transport -1000\n"
+                    )
+        category_name = regexp_result.group(1).strip().lower()
+        ammount = regexp_result.group(2)
+        messages.append(Message(category_name = category_name, ammount = ammount))
+    return messages
 
 def _get_now_formatted()  -> str:
     """ Return today's date and time as a string """

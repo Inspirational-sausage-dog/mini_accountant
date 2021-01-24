@@ -1,0 +1,7 @@
+# Ignore database
+db/finance.db
+
+# Ignore python cache
+internal/
+__pycache__/
+
