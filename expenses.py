@@ -102,7 +102,7 @@ def _parse_output(date: str)-> str:
     """ Return a parsed answer containing expenses in selected date """
     cursor = db.get_cursor()
     cursor.execute(
-            "SELECT c.name, e.created, e.ammount "
+            "SELECT c.name, e.created, e.ammount, c.max_ammount "
             "FROM expenses e "
             "LEFT JOIN categories c "
             "ON e.category_id = c.id "
@@ -117,10 +117,14 @@ def _parse_output(date: str)-> str:
     name = ""
     total = 0.0
     category_total = 0.0
+    category_max_ammount = 0
     for row in rows:
         if name != row[0]:
             if name != "":
-                message+="Category total: " + str(category_total)
+                message+="Category total: " + str(category_total) 
+                if category_max_ammount:
+                    message+= " / " + str(category_max_ammount)
+
                 category_total = 0
             name = row[0]
             message+= "\n\n" + (f"{name}:\n").capitalize()
@@ -128,10 +132,11 @@ def _parse_output(date: str)-> str:
         ammount = row[2]
         total += float(ammount)
         category_total+= float(ammount)
+        category_max_ammount = row[3]
         message+=f"{created} | {ammount} \n"
 
     return message + \
-        "Category total: " + str(category_total) + \
+        "Category total: " + str(category_total) + "/" + str(category_max_ammount) + \
         "\n\nPeriod total: " + str(total)
 
 def _parse_input(raw_message: str) -> List[Message]:

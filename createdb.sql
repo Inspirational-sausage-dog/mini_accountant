@@ -1,6 +1,7 @@
 create table categories(
     id integer primary key,
-    name varchar (64)
+    name varchar (64),
+    max_ammount integer
 );
 
 create table expenses(

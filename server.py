@@ -27,8 +27,9 @@ logger = logging.getLogger(__name__)
 API_TOKEN =  os.getenv("TELEGRAM_TOKEN")
 
 class State(Enum):
-    REPLYING_CATEGORY_NAME_DELETE= 0
-    REPLYING_EXPENSE_INFO = 1
+    REPLYING_CATEGORY_NAME_CREATE = 0
+    REPLYING_CATEGORY_NAME_DELETE= 1
+    REPLYING_EXPENSE_INFO = 2
 
 def start(update: Update, context: CallbackContext) -> int:
     """ Start of conversation, whether on bot start up or /start"""
@@ -38,6 +39,22 @@ def start(update: Update, context: CallbackContext) -> int:
             )
     return ConversationHandler.END
 
+def ask_create_category_name(update: Update, context: CallbackContext) -> int:
+    """ Ask name and limit of a category to create it """
+    update.message.reply_text(
+            "Specify the name of the category you wish to create"
+            "Add a limit if you wish"
+            "For Example: Transport -1000"
+            )
+    return State.REPLYING_CATEGORY_NAME_CREATE
+
+def create_category(update: Update, context: CallbackContext) -> int:
+    """ Finishes the exchange and creates a category  """
+    raw_message = update.message.text
+    Categories().add_category(raw_message)
+    update.message.reply_text("Success")
+    return ConversationHandler.END
+
 def ask_delete_category_name(update: Update, context: CallbackContext) -> int:
     """ Ask name of category to delete it """
     update.message.reply_text(
@@ -45,7 +62,7 @@ def ask_delete_category_name(update: Update, context: CallbackContext) -> int:
             "Attention: Expenses associated with this category will be removed as well\n"
             )
     return State.REPLYING_CATEGORY_NAME_DELETE
-
+    
 def delete_category(update: Update, context: CallbackContext) -> int:
     """ Finishes the exchange and deletes a category """
     categories = Categories().get_all_categories()
@@ -130,6 +147,7 @@ def main():
     conv_handler = ConversationHandler(
             entry_points=[
                     CommandHandler('start', start),
+                    CommandHandler('add_category', ask_create_category_name),
                     CommandHandler('del_category', ask_delete_category_name),
                     CommandHandler('del_last', delete_last),
                     CommandHandler('add_expense', ask_expense_info),
@@ -139,6 +157,9 @@ def main():
                     MessageHandler(~Filters.command, start)
                     ],
             states={
+                State.REPLYING_CATEGORY_NAME_CREATE:[
+                    MessageHandler(Filters.text & ~Filters.command, create_category)
+                    ],
                 State.REPLYING_CATEGORY_NAME_DELETE:[
                     MessageHandler(Filters.text & ~Filters.command, delete_category)
                     ],
