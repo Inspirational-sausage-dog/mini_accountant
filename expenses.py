@@ -58,7 +58,6 @@ def delete_last() -> str:
     if not result:
         return "There are no expenses yet."
     db.delete("expenses", {"id" : result[0]})
-    print(result[0])
     return "Last expense was successfully deleted\n"
 
 def get_last_expenses() -> str:
@@ -90,19 +89,21 @@ def get_expenses(date: Date) -> str:
     cursor = db.get_cursor()
     cursor.execute("SELECT SUM(ammount) FROM expenses")
     balance = cursor.fetchone()
-
-    switcher = {
-            Date.LAST: get_last_expenses(),
-            Date.TODAY: "Today's expenses: " + _parse_output('%Y-%m-%d'),
-            Date.MONTH: "This month's expenses: " + _parse_output('%Y-%m')
-            }
-    return switcher.get(date) + "\nBalance: " + str(balance[0])
+    if date == Date.LAST:
+        message = get_last_expenses()
+    elif date == Date.TODAY:
+        message = "Today's expenses: " + _parse_output("%Y-%m-%d")
+    elif date == Date.MONTH:
+        message = "This month's expenses: " + _parse_output('%Y-%m')
+    
+    return message + "\nBalance: " + str(balance[0])
 
 def _parse_output(date: str)-> str:
     """ Return a parsed answer containing expenses in selected date """
     cursor = db.get_cursor()
+    select_date = "%Y-%m-%d %H:%M:%S".replace(date, "").replace("-", "").strip()
     cursor.execute(
-            "SELECT c.name, e.created, e.ammount, c.max_ammount "
+            f"SELECT c.name, strftime('{select_date}', e.created), e.ammount, c.max_ammount "
             "FROM expenses e "
             "LEFT JOIN categories c "
             "ON e.category_id = c.id "
@@ -114,30 +115,25 @@ def _parse_output(date: str)-> str:
         return "There are no expenses yet\n"
 
     message = ""
+    category_message = ""
     name = ""
-    total = 0.0
-    category_total = 0.0
-    category_max_ammount = 0
+    total = 0
+    category_total = 0
+    
     for row in rows:
-        if name != row[0]:
-            if name != "":
-                message+="Category total: " + str(category_total) 
-                if category_max_ammount:
-                    message+= " / " + str(category_max_ammount)
-
-                category_total = 0
+        total += row[2]
+        category_total+= row[2]
+        category_message+=f"\n> {row[1]} : {row[2]}"
+        if row[0] != name:
+            message+=f"\n\n{row[0].capitalize()}"  
+            category_max = row[3]
+            message += category_message + "\nCategory Total: " + str(category_total)
+            if category_max:
+                message += " (Monthly limit: " + str(category_max) + ")"
+            category_total = 0
+            category_message = ""
             name = row[0]
-            message+= "\n\n" + (f"{name}:\n").capitalize()
-        created = datetime.datetime.strptime(row[1], "%Y-%m-%d %H:%M:%S")
-        ammount = row[2]
-        total += float(ammount)
-        category_total+= float(ammount)
-        category_max_ammount = row[3]
-        message+=f"{created} | {ammount} \n"
-
-    return message + \
-        "Category total: " + str(category_total) + "/" + str(category_max_ammount) + \
-        "\n\nPeriod total: " + str(total)
+    return message + "\n\nPeriod total: " + str(total)
 
 def _parse_input(raw_message: str) -> List[Message]:
     """ Parse text and return a message object containing category name and ammount """
