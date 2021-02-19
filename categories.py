@@ -8,13 +8,14 @@ import re
 class Category(NamedTuple):
     """Структура категории"""
     id: int
+    user_id: int
     name: str
-    max_ammount: Optional[int]
+    max_ammount: int
 
 class Message(NamedTuple):
     """ Message structure """
     category_name: str
-    max_ammount: Optional[int]
+    max_ammount: int
 
 class Categories:
     def __init__(self):
@@ -23,18 +24,22 @@ class Categories:
     def _load_categories(self) -> List[Category]:
         """Returns all existing categories stored in db"""
         categories = db.fetchall(
-                "categories", ["id","name", "max_ammount"]
+                "categories", ["id", "user_id","name", "max_ammount"]
         )
         return self._fill_fields(categories)
 
-    def add_category(self, raw_message: str) -> Category:
+    def add_category(self, user_id: int, raw_message: str) -> Category:
         """Создает категорию по названию """
-        message = self._parse_message(raw_message) 
-        db.insert("categories", {
-            "name" : message.category_name,
-            "max_ammount" : message.max_ammount }
-            )
-        return self.get_category(message.category_name)
+        message = self._parse_message(raw_message)
+        category = self.get_category(user_id, message.category_name)
+        if not category: 
+            db.insert("categories", {
+                "name" : message.category_name,
+                "user_id": user_id,
+                "max_ammount" : message.max_ammount }
+                )
+            return self.get_category(user_id, message.category_name)
+        return None
 
     def del_category(self, category: Category):
         """ Удаляет существующую категорию """
@@ -47,6 +52,7 @@ class Categories:
         for index, category in enumerate(categories):
             categories_result.append(Category(
                 id = category['id'],
+                user_id = category['user_id'],
                 name = category['name'],
                 max_ammount = category['max_ammount']
                 ))
@@ -56,11 +62,24 @@ class Categories:
         """Возращает все существующие категории"""
         return self._categories
 
-    def get_category(self, category_name: str) -> Category:
+    def get_category_list(self) -> str:
+        """ Returns a string containing all available categories """
+        categories = self.get_all_categories()
+        if not categories:
+            return "There are not categories yet"
+        text = ""
+        for category in categories:
+            text+="\n" + category.name
+            if category.max_ammount:
+                text+= " (Monthly Limit: " + str(category.max_ammount) + ")"
+        return text
+
+
+    def get_category(self, user_id: int, category_name: str) -> Category:
         """ Возращает категорию по имени """
 
         for cat in self._load_categories():
-            if cat.name == category_name:
+            if cat.name == category_name and cat.user_id == user_id:
                 return cat
         return None
 

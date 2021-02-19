@@ -39,11 +39,18 @@ def start(update: Update, context: CallbackContext) -> int:
             )
     return ConversationHandler.END
 
+def cancel(update: Update, context: CallbackContext) -> int:
+    """ Print a cancel message  """
+    update.message.reply_text(
+            "Action has been cancelled"
+            )
+    return ConversationHandler.END
+
 def ask_create_category_name(update: Update, context: CallbackContext) -> int:
     """ Ask name and limit of a category to create it """
     update.message.reply_text(
-            "Specify the name of the category you wish to create"
-            "Add a limit if you wish"
+            "Specify the name of the category you wish to create\n"
+            "Add a limit if you wish\n"
             "For Example: Transport -1000"
             )
     return State.REPLYING_CATEGORY_NAME_CREATE
@@ -51,8 +58,11 @@ def ask_create_category_name(update: Update, context: CallbackContext) -> int:
 def create_category(update: Update, context: CallbackContext) -> int:
     """ Finishes the exchange and creates a category  """
     raw_message = update.message.text
-    Categories().add_category(raw_message)
-    update.message.reply_text("Success")
+    category = Categories().add_category(update.effective_user.id, raw_message)
+    if category:
+        update.message.reply_text("Success")
+        return ConversationHandler.END
+    update.message.reply_text("This category already exists")
     return ConversationHandler.END
 
 def ask_delete_category_name(update: Update, context: CallbackContext) -> int:
@@ -62,6 +72,13 @@ def ask_delete_category_name(update: Update, context: CallbackContext) -> int:
             "Attention: Expenses associated with this category will be removed as well\n"
             )
     return State.REPLYING_CATEGORY_NAME_DELETE
+
+def show_categories(update: Update, context: CallbackContext) -> int:
+    """ Reply a list of user created categories """
+    reply = "Available categories:\n" + Categories().get_category_list()
+    update.message.reply_text(reply)
+
+    return ConversationHandler.END
     
 def delete_category(update: Update, context: CallbackContext) -> int:
     """ Finishes the exchange and deletes a category """
@@ -87,25 +104,25 @@ def delete_category(update: Update, context: CallbackContext) -> int:
 def delete_last(update: Update, context: CallbackContext) -> int:
     """ Delete last added expense """
 
-    update.message.reply_text(expenses.delete_last())
+    update.message.reply_text(expenses.delete_last(update.effective_user.id))
 
     return ConversationHandler.END
 
 def show_last_expenses(update: Update, context: CallbackContext) -> int:
     """ Show last 10 expenses """
-    update.message.reply_text(expenses.get_expenses(expenses.Date.LAST))
+    update.message.reply_text(expenses.get_expenses(update.effective_user.id, expenses.Date.LAST))
 
     return ConversationHandler.END
 
 def show_today_expenses(update: Update, context: CallbackContext) -> int:
     """ Show today's expenses """
-    update.message.reply_text(expenses.get_expenses(expenses.Date.TODAY))
+    update.message.reply_text(expenses.get_expenses(update.effective_user.id, expenses.Date.TODAY))
 
     return ConversationHandler.END
 
 def show_month_expenses(update: Update, context: CallbackContext) -> int:
     """ Show this month's expenses """
-    update.message.reply_text(expenses.get_expenses(expenses.Date.MONTH))
+    update.message.reply_text(expenses.get_expenses(update.effective_user.id, expenses.Date.MONTH))
     return ConversationHandler.END
 
 def ask_expense_info(update: Update, context: CallbackContext) -> int:
@@ -122,7 +139,7 @@ def create_expense(update: Update, context: CallbackContext) -> int:
     """ Finishes the exchange and creates an expence """
     raw_message  = update.message.text
     try:
-        expense = expenses.add_expense(raw_message)
+        expense = expenses.add_expense(update.effective_user.id, raw_message)
     except exceptions.NotCorrectMessageException as e:
         update.message.reply_text(str(e))
         return State.REPLYING_EXPENSE_INFO
@@ -149,6 +166,7 @@ def main():
                     CommandHandler('start', start),
                     CommandHandler('add_category', ask_create_category_name),
                     CommandHandler('del_category', ask_delete_category_name),
+                    CommandHandler('categories', show_categories),
                     CommandHandler('del_last', delete_last),
                     CommandHandler('add_expense', ask_expense_info),
                     CommandHandler('last', show_last_expenses),
@@ -167,7 +185,7 @@ def main():
                     MessageHandler(Filters.text & ~Filters.command, create_expense)
                     ]
                 },
-            fallbacks = [CommandHandler('cancel', start)],
+            fallbacks = [CommandHandler('cancel', cancel)],
             )
     dp.add_handler(conv_handler)
 

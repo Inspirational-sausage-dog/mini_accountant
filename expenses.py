@@ -28,16 +28,17 @@ class Expense(NamedTuple):
     ammount: float
     category_name: str
 
-def add_expense(raw_message: str):
+def add_expense(user_id: int, raw_message: str):
     """ Add expense associated with category """
     messages = _parse_input(raw_message)
     categories = []
     ammounts = []
     for message in messages:
-        category = Categories().get_category(message.category_name)
+        category = Categories().get_category(user_id, message.category_name)
         if not category:
-            category = Categories().add_category(message.category_name)
+            category = Categories().add_category(user_id, message.category_name)
         db.insert("expenses", {
+            "user_id" : user_id,
             "category_id" : category.id,
             "ammount" : message.ammount,
             "created" : _get_now_formatted()
@@ -47,11 +48,12 @@ def delete_category(category: Category):
     """ Delete expenses by category id """
     db.delete("expenses", {"category_id" : category.id})
 
-def delete_last() -> str:
+def delete_last(user_id: int) -> str:
     """ Delete last added expense, returns status of whether it deleted or not """
     cursor = db.get_cursor()
     cursor.execute(
             "SELECT id FROM expenses "
+            f"WHERE user_id = {user_id} "
             "ORDER BY created DESC LIMIT 1"
             )
     result = cursor.fetchone()
@@ -60,7 +62,7 @@ def delete_last() -> str:
     db.delete("expenses", {"id" : result[0]})
     return "Last expense was successfully deleted\n"
 
-def get_last_expenses() -> str:
+def get_last_expenses(user_id: int) -> str:
     """ Return answer containing last 10 expenses """
     cursor = db.get_cursor()
     cursor.execute(
@@ -68,6 +70,7 @@ def get_last_expenses() -> str:
             "FROM expenses e "
             "LEFT JOIN categories c "
             "ON e.category_id = c.id "
+            f"WHERE c.user_id = {user_id} "
             "ORDER BY created ASC "
             "LIMIT 10"
             )
@@ -81,24 +84,27 @@ def get_last_expenses() -> str:
         name = row[0]
         created = row[1]
         ammount = row[2]
-        message+=f"{created} | {name} | {ammount}\n"
+        message+=f"{row[1]} | {row[0].capitalize()} | {row[2]}\n"
     return message
 
-def get_expenses(date: Date) -> str:
+def get_expenses(user_id: int, date: Date) -> str:
 
     cursor = db.get_cursor()
-    cursor.execute("SELECT SUM(ammount) FROM expenses")
+    cursor.execute(
+            "SELECT SUM(ammount) FROM expenses "
+            f"WHERE user_id = {user_id}"
+            )
     balance = cursor.fetchone()
     if date == Date.LAST:
-        message = get_last_expenses()
+        message = get_last_expenses(user_id)
     elif date == Date.TODAY:
-        message = "Today's expenses: " + _parse_output("%Y-%m-%d")
+        message = "Today's expenses: " + _parse_output(user_id, "%Y-%m-%d")
     elif date == Date.MONTH:
-        message = "This month's expenses: " + _parse_output('%Y-%m')
+        message = "This month's expenses: " + _parse_output(user_id, '%Y-%m')
     
     return message + "\nBalance: " + str(balance[0])
 
-def _parse_output(date: str)-> str:
+def _parse_output(user_id: int, date: str)-> str:
     """ Return a parsed answer containing expenses in selected date """
     cursor = db.get_cursor()
     select_date = "%Y-%m-%d %H:%M:%S".replace(date, "").replace("-", "").strip()
@@ -108,6 +114,7 @@ def _parse_output(date: str)-> str:
             "LEFT JOIN categories c "
             "ON e.category_id = c.id "
             f"WHERE strftime('{date}', created) = strftime('{date}', 'now') "
+            f"AND c.user_id = {user_id} "
             "ORDER BY c.name ASC"
             )
     rows = cursor.fetchall()
