@@ -14,25 +14,22 @@ from categories import Category, Categories
 
 class Date(Enum):
     LAST = 0
-    TODAY = 1
-    MONTH = 2
+    PREVIOUS_MONTH = 1
+    THIS_MONTH  = 2
 
 class Message(NamedTuple):
     """ Message structure """
     category_name: str
     ammount: float
+    created: str
 
-class Expense(NamedTuple):
-    """ Expense structure """
-    id: Optional[int]
-    ammount: float
-    category_name: str
+def set_budget(user_id: int, ammount: int):
+    """ Set user budget  """
+    db.replace("budget", {"user_id" : user_id, "ammount" : ammount})
 
 def add_expense(user_id: int, raw_message: str):
     """ Add expense associated with category """
     messages = _parse_input(raw_message)
-    categories = []
-    ammounts = []
     for message in messages:
         category = Categories().get_category(user_id, message.category_name)
         if not category:
@@ -41,7 +38,7 @@ def add_expense(user_id: int, raw_message: str):
             "user_id" : user_id,
             "category_id" : category.id,
             "ammount" : message.ammount,
-            "created" : _get_now_formatted()
+            "created" : message.created
             })
 
 def delete_category(category: Category):
@@ -79,48 +76,50 @@ def get_last_expenses(user_id: int) -> str:
     if not rows:
         return "There are no expenses yet\n"
 
-    message = "Last 10 expenses:\n\n"
+    message = "Last 10 added expenses:\n"
     for row in rows:
         name = row[0]
         created = row[1]
         ammount = row[2]
-        message+=f"{row[1]} | {row[0].capitalize()} | {row[2]}\n"
+        message+=f"\n{row[1]} | {row[0].capitalize()} | {row[2]}"
     return message
 
 def get_expenses(user_id: int, date: Date) -> str:
 
-    cursor = db.get_cursor()
-    cursor.execute(
-            "SELECT SUM(ammount) FROM expenses "
-            f"WHERE user_id = {user_id}"
-            )
-    balance = cursor.fetchone()
+
     if date == Date.LAST:
         message = get_last_expenses(user_id)
-    elif date == Date.TODAY:
-        message = "Today's expenses: " + _parse_output(user_id, "%Y-%m-%d")
-    elif date == Date.MONTH:
-        message = "This month's expenses: " + _parse_output(user_id, '%Y-%m')
-    
-    return message + "\nBalance: " + str(balance[0])
+    elif date == Date.PREVIOUS_MONTH:
+        message = "Last month's expenses: " + _parse_output(user_id, "DATE('now', '-1 month')")
+    elif date == Date.THIS_MONTH:
+        message = "This month's expenses: " + _parse_output(user_id, "'now'")
+
+    return message
 
 def _parse_output(user_id: int, date: str)-> str:
     """ Return a parsed answer containing expenses in selected date """
+
     cursor = db.get_cursor()
-    select_date = "%Y-%m-%d %H:%M:%S".replace(date, "").replace("-", "").strip()
+    cursor.execute(f"SELECT ammount FROM budget WHERE user_id={user_id}")
+    budget = cursor.fetchone()
+    if not budget:
+        set_budget(user_id, 5000)
+        budget = (5000,)
+    budget = budget[0]
     cursor.execute(
-            f"SELECT c.name, strftime('{select_date}', e.created), e.ammount, c.max_ammount "
+            f"SELECT c.name, strftime('%d-%m %H:%M', e.created), e.ammount, c.max_ammount "
             "FROM expenses e "
             "LEFT JOIN categories c "
             "ON e.category_id = c.id "
-            f"WHERE strftime('{date}', created) = strftime('{date}', 'now') "
+            f"WHERE (strftime('%Y-%m', created) = strftime('%Y-%m', {date}) "
+            "OR created = 'Monthly') "
             f"AND c.user_id = {user_id} "
             "ORDER BY c.name ASC"
             )
     rows = cursor.fetchall()
     if not rows:
         return "There are no expenses yet\n"
-
+    
     message = ""
     category_message = ""
     name = ""
@@ -128,25 +127,29 @@ def _parse_output(user_id: int, date: str)-> str:
     category_total = 0
     
     for row in rows:
+        created = row[1]
+        if not row[1] : created = "Monthly"
         total += row[2]
-        category_total+= row[2]
-        category_message+=f"\n> {row[1]} : {row[2]}"
+        category_total += row[2]
+        category_message += f"\n> {created} : {row[2]}"
         if row[0] != name:
-            message+=f"\n\n{row[0].capitalize()}"  
+            message += f"\n\n{row[0].capitalize()}"  
             category_max = row[3]
-            message += category_message + "\nCategory Total: " + str(category_total)
+            message += f"{category_message}\nCategory Total: {category_total}"
             if category_max:
-                message += " (Monthly limit: " + str(category_max) + ")"
+                message += f" (Monthly limit: {category_max})"
             category_total = 0
             category_message = ""
             name = row[0]
-    return message + "\n\nPeriod total: " + str(total)
+    return message + f"\n\nMonth Total/Budget: {total}/{budget} ({total-budget})"
 
 def _parse_input(raw_message: str) -> List[Message]:
     """ Parse text and return a message object containing category name and ammount """
     messages = []
+    created = _get_now_formatted()
+
     for raw in raw_message.split('\n'):
-        regexp_result = re.match(r"(.*) (-?[\d]+)", raw)
+        regexp_result = re.match(r"(.*) (-?[\d]+)( M)?", raw, re.IGNORECASE)
         if not regexp_result or not regexp_result.group(0) \
                 or not regexp_result.group(1) or not regexp_result.group(2):
             raise exceptions.NotCorrectMessageException(
@@ -156,7 +159,12 @@ def _parse_input(raw_message: str) -> List[Message]:
                     )
         category_name = regexp_result.group(1).strip().lower()
         ammount = regexp_result.group(2)
-        messages.append(Message(category_name = category_name, ammount = ammount))
+        if regexp_result.group(3):
+            created = "Monthly"
+        messages.append(Message(
+            category_name = category_name,
+            ammount = ammount,
+            created = created))
     return messages
 
 def _get_now_formatted()  -> str:

@@ -38,6 +38,18 @@ def delete(table: str, condition: Dict):
     cursor.execute(query, (value,))
     conn.commit()
 
+def replace(table: str, column_values: Dict):
+    columns =', '.join(column_values.keys())
+    values = [tuple(column_values.values())]
+    placeholders = ', '.join('?' * len(column_values.keys()))
+
+    cursor.executemany(
+            f"REPLACE INTO {table}"
+            f"({columns}) "
+            f"VALUES({placeholders})",
+            values)
+    conn.commit()
+
 def get_cursor():
     return cursor
 

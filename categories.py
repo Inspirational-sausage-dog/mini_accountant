@@ -84,22 +84,22 @@ class Categories:
         return None
 
     def _parse_message(self, raw_message: str) -> Message:
-        regexp_result=re.match(r"(\w*) (-?[\d]+)|^(\w*)$", raw_message)
-        if (not regexp_result or not regexp_result.group(0) \
-                or not regexp_result.group(1) or not regexp_result.group(2)) \
-                and not regexp_result.group(3):
+        print(raw_message)
+        regexp_result=re.match(r"(.*)( -?[\d]+)?", raw_message)
+        if not regexp_result or not regexp_result.group(0) \
+                or not regexp_result.group(1):
                     raise exceptions.NotCorrectMessageException(
                             f"Could not understand {raw_message}. Please answer in fromat:\n"
                             "Category Ammoount\n"
                             "For Example: Transport -1000\n"
                             )
 
-        if regexp_result.group(3):
-            category_name = regexp_result.group(3).strip().lower()
-            return Message(category_name = category_name, max_ammount = None)
-        
         category_name = regexp_result.group(1).strip().lower()
-        max_ammount = regexp_result.group(2)
+        max_ammount = None
+
+        if regexp_result.group(2):
+            max_ammount = regexp_result.group(2)
+        
         return Message(category_name = category_name, max_ammount = max_ammount) 
 
 

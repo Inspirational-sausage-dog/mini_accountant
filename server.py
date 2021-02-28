@@ -27,14 +27,17 @@ logger = logging.getLogger(__name__)
 API_TOKEN =  os.getenv("TELEGRAM_TOKEN")
 
 class State(Enum):
-    REPLYING_CATEGORY_NAME_CREATE = 0
-    REPLYING_CATEGORY_NAME_DELETE= 1
-    REPLYING_EXPENSE_INFO = 2
+    REPLYING_BUDGET = 0
+    REPLYING_CATEGORY_NAME_CREATE = 1
+    REPLYING_CATEGORY_NAME_DELETE= 2
+    REPLYING_EXPENSE_INFO = 3
 
 def start(update: Update, context: CallbackContext) -> int:
     """ Start of conversation, whether on bot start up or /start"""
     update.message.reply_text(
             "Hello, I'm mini-accountant!\n\n"
+            "To begin you need to set your budget with /set_budget command"
+            "By default it's set to 5000"
             "To add an expense use the /add_expense command.\n"
             )
     return ConversationHandler.END
@@ -44,6 +47,23 @@ def cancel(update: Update, context: CallbackContext) -> int:
     update.message.reply_text(
             "Action has been cancelled"
             )
+    return ConversationHandler.END
+
+def ask_budget(update: Update, context: CallbackContext) -> int:
+    """ Set the budget """
+    update.message.reply_text(
+            "What's going to be your budget?"
+            )
+
+    return State.REPLYING_BUDGET
+
+def set_budget(update: Update, context: CallbackContext) -> int:
+    """ Sets the budget ammount """
+    budget = update.message.text
+    expenses.set_budget(update.effective_user.id, budget)
+
+    update.message.reply_text(f"Budget has been set to {budget} successfully!")
+
     return ConversationHandler.END
 
 def ask_create_category_name(update: Update, context: CallbackContext) -> int:
@@ -108,21 +128,21 @@ def delete_last(update: Update, context: CallbackContext) -> int:
 
     return ConversationHandler.END
 
-def show_last_expenses(update: Update, context: CallbackContext) -> int:
+def last(update: Update, context: CallbackContext) -> int:
     """ Show last 10 expenses """
     update.message.reply_text(expenses.get_expenses(update.effective_user.id, expenses.Date.LAST))
 
     return ConversationHandler.END
 
-def show_today_expenses(update: Update, context: CallbackContext) -> int:
+def previous_month(update: Update, context: CallbackContext) -> int:
     """ Show today's expenses """
-    update.message.reply_text(expenses.get_expenses(update.effective_user.id, expenses.Date.TODAY))
+    update.message.reply_text(expenses.get_expenses(update.effective_user.id, expenses.Date.PREVIOUS_MONTH))
 
     return ConversationHandler.END
 
-def show_month_expenses(update: Update, context: CallbackContext) -> int:
+def this_month(update: Update, context: CallbackContext) -> int:
     """ Show this month's expenses """
-    update.message.reply_text(expenses.get_expenses(update.effective_user.id, expenses.Date.MONTH))
+    update.message.reply_text(expenses.get_expenses(update.effective_user.id, expenses.Date.THIS_MONTH))
     return ConversationHandler.END
 
 def ask_expense_info(update: Update, context: CallbackContext) -> int:
@@ -164,17 +184,21 @@ def main():
     conv_handler = ConversationHandler(
             entry_points=[
                     CommandHandler('start', start),
+                    CommandHandler('set_budget', ask_budget),
                     CommandHandler('add_category', ask_create_category_name),
                     CommandHandler('del_category', ask_delete_category_name),
                     CommandHandler('categories', show_categories),
                     CommandHandler('del_last', delete_last),
                     CommandHandler('add_expense', ask_expense_info),
-                    CommandHandler('last', show_last_expenses),
-                    CommandHandler('today', show_today_expenses),
-                    CommandHandler('month', show_month_expenses),
+                    CommandHandler('last', last),
+                    CommandHandler('previous', previous_month),
+                    CommandHandler('this', this_month),
                     MessageHandler(~Filters.command, start)
                     ],
             states={
+                State.REPLYING_BUDGET:[
+                    MessageHandler(Filters.regex(r'\d'), set_budget)
+                    ],
                 State.REPLYING_CATEGORY_NAME_CREATE:[
                     MessageHandler(Filters.text & ~Filters.command, create_category)
                     ],
